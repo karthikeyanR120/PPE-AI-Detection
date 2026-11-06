@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>AI Helmet Detection System</title>
+
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@latest"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@teachablemachine/image@latest/dist/teachablemachine-image.min.js"></script>
+
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            text-align: center;
+            background: #f2f2f2;
+            padding: 20px;
+        }
+
+        h1 {
+            margin-bottom: 20px;
+        }
+
+        button {
+            font-size: 20px;
+            padding: 12px 25px;
+            cursor: pointer;
+        }
+
+        #webcam-container {
+            margin-top: 20px;
+        }
+
+        #result {
+            font-size: 28px;
+            font-weight: bold;
+            margin-top: 20px;
+        }
+
+        #confidence {
+            font-size: 22px;
+            margin-top: 10px;
+        }
+    </style>
+</head>
+
+<body>
+
+    <h1>AI-Based Helmet Detection System</h1>
+
+    <button onclick="startSystem()">START CAMERA</button>
+
+    <div id="webcam-container"></div>
+
+    <div id="result">System Ready</div>
+
+    <div id="confidence"></div>
+
+    <script>
+
+        const MODEL_URL ="./";
+
+        let model;
+        let webcam;
+        let lastAlert = 0;
+
+        async function startSystem() {
+
+            try {
+
+                // Load model
+                model = await tmImage.load(
+                    MODEL_URL + "model.json",
+                    MODEL_URL + "metadata.json"
+                );
+
+                // Start webcam
+                webcam = new tmImage.Webcam(400, 400, true);
+
+                await webcam.setup();
+                await webcam.play();
+
+                document
+                    .getElementById("webcam-container")
+                    .appendChild(webcam.canvas);
+
+                document.getElementById("result").innerText =
+                    "CAMERA STARTED";
+
+                // Start prediction
+                window.requestAnimationFrame(loop);
+
+            } catch (error) {
+
+                console.error("Full Error:",error);
+
+                document.getElementById("result").innerText =
+                    "ERROR:"+error.message;
+            }
+        }
+
+        async function loop() {
+
+            webcam.update();
+
+            await predict();
+
+            window.requestAnimationFrame(loop);
+        }
+
+        async function predict() {
+
+            const prediction =
+                await model.predict(webcam.canvas);
+
+            // Find highest prediction
+            let highest = prediction[0];
+
+            for (let i = 1; i < prediction.length; i++) {
+
+                if (
+                    prediction[i].probability >
+                    highest.probability
+                ) {
+                    highest = prediction[i];
+                }
+            }
+
+            const originalClass = highest.className;
+
+            // Normalize class name
+            const className =
+                originalClass
+                    .toLowerCase()
+                    .replace(/[\s_-]/g, "");
+
+            const confidence =
+                highest.probability * 100;
+
+            // Show prediction in console
+            console.log(
+                "Detected:",
+                originalClass,
+                confidence.toFixed(1) + "%"
+            );
+
+            // Show confidence
+            document.getElementById("confidence").innerText =
+                "Confidence: " +
+                confidence.toFixed(1) +
+                "%";
+
+
+            // =========================
+            // WITH HELMET
+            // =========================
+
+            if (
+                className.includes("withhelmet")
+            ) {
+
+                document.getElementById("result").innerText =
+                    "STATUS: SAFE - HELMET DETECTED";
+            }
+
+
+            // =========================
+            // WITHOUT HELMET
+            // =========================
+
+            else if (
+                className.includes("withouthelmet")
+            ) {
+
+                document.getElementById("result").innerText =
+                    "STATUS: WARNING - NO HELMET";
+
+                console.log("NO HELMET CONDITION DETECTED");
+
+
+                // Voice every 5 seconds
+                if (
+                    Date.now() - lastAlert >= 5000
+                ) {
+
+                    console.log("VOICE ALERT TRIGGERED");
+
+                    const msg =
+                        new SpeechSynthesisUtterance(
+                            "Please wear your helmet."
+                        );
+
+                    msg.rate = 1;
+                    msg.volume = 1;
+                    msg.pitch = 1;
+
+                    speechSynthesis.cancel();
+                    speechSynthesis.speak(msg);
+
+                    lastAlert = Date.now();
+                }
+            }
+
+
+            // =========================
+            // OTHER
+            // =========================
+
+            else {
+
+                document.getElementById("result").innerText =
+                    "STATUS: " + originalClass;
+
+            }
+        }
+
+    </script>
+
+</body>
+</html>
